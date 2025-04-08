@@ -363,7 +363,7 @@ public class EPrescription {
         patient.firstName = this.patientFirstName;
         patient.street = this.patientStreet;
         patient.city = this.patientCity;
-        patient.kanton = "ZH"; // TODO: [self swissKantonFromZip:self.patientZip];
+        patient.kanton = KantonMap.kantonFromZip(this.patientZip);
         patient.zipCode = this.patientZip;
         patient.birthday = this.patientBirthdate;
         patient.sex = this.patientGender; // same, 1 = m, 2 = f

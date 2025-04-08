@@ -12,6 +12,7 @@ repositories {
 dependencies {
     implementation("jakarta.json:jakarta.json-api:2.0.1")
     implementation("org.glassfish:jakarta.json:2.0.1")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-xml:2.18.3")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }

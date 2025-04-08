@@ -13,6 +13,7 @@ import java.time.temporal.TemporalAccessor;
 import java.time.temporal.TemporalField;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Random;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
@@ -20,15 +21,15 @@ import java.util.zip.GZIPInputStream;
 import jakarta.json.*;
 
 public class EPrescription {
-    class PatientId {
+    static public class PatientId {
         public int type;
         public String value;
     }
-    class PField {
+    static public class PField {
         public String nm;
         public String value;
     }
-    class TakingTime {
+    static public class TakingTime {
         public int off;
         public int du;
         public int doFrom;
@@ -36,7 +37,7 @@ public class EPrescription {
         public int a;
         public int ma;
     }
-    class Posology {
+    static public class Posology {
         public Instant dtFrom;
         public Instant dtTo;
         public int cyDu;
@@ -44,7 +45,7 @@ public class EPrescription {
         public ArrayList<Integer> d;
         public ArrayList<TakingTime> tt;
     }
-    class Medicament {
+    static public class Medicament {
         public String appInstr;
         public String medicamentId;
         int idType;
@@ -117,7 +118,7 @@ public class EPrescription {
         this.date = this.parseDateString(jsonObj.getString("Dt", null));
         this.prescriptionId = jsonObj.getString("Id", null);
         this.medType = jsonObj.getInt("MedType");
-        this.zsr = jsonObj.getString("Zsr", null);
+        this.zsr = jsonObj.getString("Zsr", "");
         this.rmk = jsonObj.getString("Rmk", null);
 
         ArrayList<PField> pfields = new ArrayList<PField>();
@@ -133,6 +134,7 @@ public class EPrescription {
         }
         this.PFields = pfields;
 
+        ArrayList<PatientId> patientIds = new ArrayList<PatientId>();
         JsonObject patient = jsonObj.getJsonObject("Patient");
         if (patient != null) {
             this.patientBirthdate = this.parseDateString(patient.getString("BDt", null));
@@ -146,17 +148,16 @@ public class EPrescription {
             this.patientEmail = patient.getString("Email", null);
             this.patientReceiverGLN = patient.getString("Rcv", null);
             this.patientLang = patient.getString("Lng", null);
-        }
 
-        ArrayList<PatientId> patientIds = new ArrayList<PatientId>();
-        JsonArray jsonPatientIds = patient.getJsonArray("Ids");
-        if (jsonPatientIds != null) {
-            for (int i = 0; i < jsonPatientIds.size(); i++) {
-                JsonObject patientIdDict = jsonPatientIds.getJsonObject(i);
-                PatientId pid = new PatientId();
-                pid.value = patientIdDict.getString("Val", null);
-                pid.type = patientIdDict.getInt("Type");
-                patientIds.add(pid);
+            JsonArray jsonPatientIds = patient.getJsonArray("Ids");
+            if (jsonPatientIds != null) {
+                for (int i = 0; i < jsonPatientIds.size(); i++) {
+                    JsonObject patientIdDict = jsonPatientIds.getJsonObject(i);
+                    PatientId pid = new PatientId();
+                    pid.value = patientIdDict.getString("Val", null);
+                    pid.type = patientIdDict.getInt("Type");
+                    patientIds.add(pid);
+                }
             }
         }
         this.patientIds = patientIds;
@@ -237,7 +238,7 @@ public class EPrescription {
     }
 
     private Instant parseDateString(String str) {
-        if (str == null || !(str instanceof String)) {
+        if (str == null) {
             return null;
         }
         Exception lastException = null;
@@ -301,5 +302,113 @@ public class EPrescription {
         }
 
         return null;
+    }
+
+    ZurRosePrescription toZurRosePrescription() {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.from(ZoneOffset.UTC));
+        ZurRosePrescription prescription = new ZurRosePrescription();
+
+        prescription.issueDate = this.date;
+        int random = Math.abs(new Random().nextInt());
+        prescription.prescriptionNr = String.format("%09d", random).substring(0, 9);
+        prescription.remark = this.rmk;
+        prescription.validity = this.valDt; // ???
+
+        prescription.user = "";
+        prescription.password = "";
+        prescription.deliveryType = ZurRosePrescription.DeliveryType.Patient;
+        prescription.ignoreInteractions = false;
+        prescription.interactionsWithOldPres = false;
+
+        ZurRosePrescriptorAddress prescriptor = new ZurRosePrescriptorAddress();
+        prescription.prescriptorAddress = prescriptor;
+        prescriptor.zsrId = this.zsr;
+        prescriptor.lastName = this.auth; // ???
+
+        prescriptor.langCode = 1;
+        prescriptor.clientNrClustertec = "888870";
+        prescriptor.street = "";
+        prescriptor.zipCode = "";
+        prescriptor.city = "";
+        prescriptor.eanId = "";
+
+        String insuranceEan = null;
+        String coverCardId = null;
+        for (PatientId pid : this.patientIds) {
+            if (pid.type == 1) {
+                if (pid.value.length() == 13) {
+                    insuranceEan = pid.value;
+                } else if (pid.value.length() == 20 || pid.value.contains(".")) {
+                    coverCardId = pid.value;
+                }
+            }
+        }
+
+        ZurRosePatientAddress patient = new ZurRosePatientAddress();
+        prescription.patientAddress = patient;
+        patient.lastName = this.patientLastName;
+        patient.firstName = this.patientFirstName;
+        patient.street = this.patientStreet;
+        patient.city = this.patientCity;
+        patient.kanton = "ZH"; // TODO: [self swissKantonFromZip:self.patientZip];
+        patient.zipCode = this.patientZip;
+        patient.birthday = this.patientBirthdate;
+        patient.sex = this.patientGender; // same, 1 = m, 2 = f
+        patient.phoneNrHome = this.patientPhone;
+        patient.email = this.patientEmail;
+        patient.langCode = 1; // de
+        // TODO: get langauge
+//        [self.patientLang.lowercaseString hasPrefix:@"de"] ? 1
+//        : [self.patientLang.lowercaseString hasPrefix:@"fr"] ? 2
+//        : [self.patientLang.lowercaseString hasPrefix:@"it"] ? 3
+//        : 1;
+        patient.patientNr = "";
+        patient.coverCardId = coverCardId != null ? coverCardId : "";
+
+        ArrayList<ZurRoseProduct> products = new ArrayList<>();
+        for (Medicament medi : this.medicaments) {
+            ZurRoseProduct product = new ZurRoseProduct();
+            products.add(product);
+
+            switch (medi.idType) {
+                case 2:
+                    // GTIN
+                    product.eanId = medi.medicamentId;
+                    break;
+                case 3:
+                    // Pharmacode
+                    product.pharmacode = medi.medicamentId;
+                    break;
+            }
+            product.quantity = medi.nbPack;
+            product.remark = "";
+            product.insuranceBillingType = 1;
+            product.insuranceEanId = insuranceEan;
+
+            boolean repetition = false;
+            Instant validityRepetition = null;
+            ArrayList<ZurRosePosology> poses = new ArrayList<>();
+            ZurRosePosology pos = new ZurRosePosology();
+            poses.add(pos);
+            for (Posology mediPos : medi.pos) {
+                if (!mediPos.d.isEmpty()) {
+                    pos.qtyMorning = mediPos.d.get(0);
+                    pos.qtyMidday = mediPos.d.get(1);
+                    pos.qtyEvening = mediPos.d.get(2);
+                    pos.qtyNight = mediPos.d.get(3);
+                    pos.posologyText = medi.appInstr;
+                }
+                if (mediPos.dtTo != null) {
+                    repetition = true;
+                    validityRepetition = mediPos.dtTo;
+                }
+            }
+            product.validityRepetition = validityRepetition == null ? "" : formatter.format(validityRepetition);
+            product.repetition = repetition;
+            product.posology = poses;
+        }
+        prescription.products = products;
+
+        return prescription;
     }
 }

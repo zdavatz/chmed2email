@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.time.DateTimeException;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.chrono.Chronology;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
@@ -241,17 +243,19 @@ public class EPrescription {
         if (str == null) {
             return null;
         }
+        // The specification says it's ISO8601, but I got a non-standard date as the sample input
+        // here we try a few different date formats just in case
         Exception lastException = null;
         try {
-            TemporalAccessor ta = DateTimeFormatter.ISO_INSTANT.parse(str);
+            TemporalAccessor ta = DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(str);
             return Instant.from(ta);
         } catch (DateTimeException e) {
             // no op
             lastException = e;
         }
 
-        // The specification says it's ISO8601, but I got a non-standard date as the sample input
         try {
+            // Date only string, 1990-01-01
             Pattern pattern = Pattern.compile("^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
             Matcher matcher = pattern.matcher(str);
             if (matcher.find()) {
@@ -278,6 +282,7 @@ public class EPrescription {
             lastException = e;
         }
 
+        // Handle invalid format, like: 2025-02-26T15:20:01+2:00
         Pattern regex = Pattern.compile("([\\+|\\-])([0-9]{1,2}):?([0-9]{1,2})$");
         Matcher m = regex.matcher(str);
         if (m.find()) {
@@ -286,10 +291,18 @@ public class EPrescription {
             String timeZoneOffsetHour = m.group(2);
             String timeZoneOffsetMinutes = m.group(3);
 
-            String newDateString = String.format("%s%s%02d%02d", pre, timeZoneOffsetMark, Integer.parseInt(timeZoneOffsetHour), Integer.parseInt(timeZoneOffsetMinutes));
+            String newDateString1 = String.format("%s%s%02d%02d", pre, timeZoneOffsetMark, Integer.parseInt(timeZoneOffsetHour), Integer.parseInt(timeZoneOffsetMinutes));
+            String newDateString2 = String.format("%s%s%02d:%02d", pre, timeZoneOffsetMark, Integer.parseInt(timeZoneOffsetHour), Integer.parseInt(timeZoneOffsetMinutes));
 
             try {
-                TemporalAccessor ta = DateTimeFormatter.ofPattern("yyyy-MM-ddHH:mm:ssZ").parse(newDateString);
+                TemporalAccessor ta = DateTimeFormatter.ofPattern("yyyy-MM-ddHH:mm:ssZ").parse(newDateString1);
+                return Instant.from(ta);
+            } catch (DateTimeException e) {
+                // no op
+                lastException = e;
+            }
+            try {
+                TemporalAccessor ta = DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(newDateString2);
                 return Instant.from(ta);
             } catch (DateTimeException e) {
                 // no op

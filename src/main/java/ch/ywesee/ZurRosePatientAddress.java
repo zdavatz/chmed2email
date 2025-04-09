@@ -2,13 +2,13 @@ package ch.ywesee;
 
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
-import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 
 public class ZurRosePatientAddress extends ZurRoseAddress {
-    public Instant birthday;
+    public ZonedDateTime birthday;
     public int langCode; // 1 = de, 2 = fr, 3 = it
     public String coverCardId; // optional
     public int sex; // 1 = m, 2 = f
@@ -21,7 +21,7 @@ public class ZurRosePatientAddress extends ZurRoseAddress {
         sw.writeStartElement("patientAddress");
         super.writeBodyToXMLElement(sw);
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.from(ZoneOffset.UTC));
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         if (this.birthday != null) {
             sw.writeAttribute("birthday", formatter.format(this.birthday));
         } else {

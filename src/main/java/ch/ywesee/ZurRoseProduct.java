@@ -98,8 +98,6 @@ public class ZurRoseProduct {
         }
 
         sw.writeStartElement("insurance");
-        // DDXMLElement *insurance = [DDXMLElement elementWithName:@"insurance"];
-        // [e addChild:insurance];
 
         if (this.insuranceEanId != null) {
             sw.writeAttribute("eanId", this.insuranceEanId);

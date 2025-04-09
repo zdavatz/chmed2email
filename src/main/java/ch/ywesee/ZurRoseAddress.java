@@ -5,6 +5,7 @@ import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
+import java.util.Objects;
 
 public class ZurRoseAddress {
     public String title; // optional
@@ -30,25 +31,17 @@ public class ZurRoseAddress {
             sw.writeAttribute("titleCode", Integer.toString(this.titleCode));
         }
 
-        sw.writeAttribute("lastName", this.lastName);
+        sw.writeAttribute("lastName", Objects.requireNonNullElse(this.lastName, ""));
 
         if (this.firstName != null) {
             sw.writeAttribute("firstName", this.firstName);
         };
 
-        sw.writeAttribute("street", this.street);
-        if (this.zipCode != null) {
-            sw.writeAttribute("zipCode", this.zipCode);
-        } else {
-            sw.writeAttribute("zipCode", "");
-        }
-        sw.writeAttribute("city", this.city);
+        sw.writeAttribute("street", Objects.requireNonNullElse(this.street, ""));
+        sw.writeAttribute("zipCode", Objects.requireNonNullElse(this.zipCode, ""));
+        sw.writeAttribute("city", Objects.requireNonNullElse(this.city, ""));
 
-        if (this.kanton != null) {
-            sw.writeAttribute("kanton", this.kanton);
-        } else {
-            sw.writeAttribute("kanton", "");
-        }
+        sw.writeAttribute("kanton", Objects.requireNonNullElse(this.kanton, ""));
         if (this.country != null) {
             sw.writeAttribute("country", this.country);
         };

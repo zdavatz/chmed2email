@@ -2,17 +2,11 @@ package ch.ywesee;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.text.SimpleDateFormat;
-import java.time.DateTimeException;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
-import java.time.chrono.Chronology;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
-import java.time.temporal.TemporalField;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Random;
@@ -40,8 +34,8 @@ public class EPrescription {
         public int ma;
     }
     static public class Posology {
-        public Instant dtFrom;
-        public Instant dtTo;
+        public ZonedDateTime dtFrom;
+        public ZonedDateTime dtTo;
         public int cyDu;
         public int inRes;
         public ArrayList<Integer> d;
@@ -58,18 +52,18 @@ public class EPrescription {
         ArrayList<Posology> pos;
     }
     public String auth;
-    public Instant date;
+    public ZonedDateTime date;
     public String prescriptionId;
     public int medType;
     public String zsr;
     public ArrayList<PField> PFields;
     public String rmk;
     public String valBy; // The GLN of the healthcare professional who has validated the medication plan.
-    public Instant valDt; // Date of validation
+    public ZonedDateTime valDt; // Date of validation
 
     public String patientFirstName;
     public String patientLastName;
-    public Instant patientBirthdate;
+    public ZonedDateTime patientBirthdate;
     public int patientGender;
     public String patientStreet;
     public String patientCity;
@@ -239,7 +233,7 @@ public class EPrescription {
         this.medicaments = medicaments;
     }
 
-    private Instant parseDateString(String str) {
+    private ZonedDateTime parseDateString(String str) {
         if (str == null) {
             return null;
         }
@@ -248,7 +242,7 @@ public class EPrescription {
         Exception lastException = null;
         try {
             TemporalAccessor ta = DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(str);
-            return Instant.from(ta);
+            return ZonedDateTime.from(ta);
         } catch (DateTimeException e) {
             // no op
             lastException = e;
@@ -264,10 +258,10 @@ public class EPrescription {
                                 .parseDefaulting(ChronoField.HOUR_OF_DAY, 0)
                                 .parseDefaulting(ChronoField.MINUTE_OF_HOUR, 0)
                                 .parseDefaulting(ChronoField.SECOND_OF_MINUTE, 0)
-                                .parseDefaulting(ChronoField.INSTANT_SECONDS, 0)
-                                .toFormatter();
+                                .toFormatter()
+                                .withZone(ZoneId.from(ZoneOffset.UTC));
                 TemporalAccessor ta = formatter.parse(str);
-                return Instant.from(ta);
+                return ZonedDateTime.from(ta);
             }
         } catch (DateTimeException e) {
             // no op
@@ -276,7 +270,7 @@ public class EPrescription {
 
         try {
             TemporalAccessor ta = DateTimeFormatter.ofPattern("yyyy-MM-ddHH:mm:ssZ").parse(str);
-            return Instant.from(ta);
+            return ZonedDateTime.from(ta);
         } catch (DateTimeException e) {
             // no op
             lastException = e;
@@ -296,14 +290,14 @@ public class EPrescription {
 
             try {
                 TemporalAccessor ta = DateTimeFormatter.ofPattern("yyyy-MM-ddHH:mm:ssZ").parse(newDateString1);
-                return Instant.from(ta);
+                return ZonedDateTime.from(ta);
             } catch (DateTimeException e) {
                 // no op
                 lastException = e;
             }
             try {
                 TemporalAccessor ta = DateTimeFormatter.ISO_OFFSET_DATE_TIME.parse(newDateString2);
-                return Instant.from(ta);
+                return ZonedDateTime.from(ta);
             } catch (DateTimeException e) {
                 // no op
                 lastException = e;
@@ -399,7 +393,7 @@ public class EPrescription {
             product.insuranceEanId = insuranceEan;
 
             boolean repetition = false;
-            Instant validityRepetition = null;
+            ZonedDateTime validityRepetition = null;
             ArrayList<ZurRosePosology> poses = new ArrayList<>();
             ZurRosePosology pos = new ZurRosePosology();
             poses.add(pos);

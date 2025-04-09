@@ -1,17 +1,11 @@
 package ch.ywesee;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-
-import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLOutputFactory;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.io.IOException;
 import java.io.StringWriter;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 
@@ -22,8 +16,8 @@ public class ZurRosePrescription {
         Address, // 3
     }
 
-    public Instant issueDate;
-    public Instant validity;
+    public ZonedDateTime issueDate;
+    public ZonedDateTime validity;
     public String user = "";
     public String password = "";
     public String prescriptionNr = ""; // optional
@@ -41,7 +35,6 @@ public class ZurRosePrescription {
     ArrayList<ZurRoseProduct> products;
 
     public String toXML() throws IOException, XMLStreamException {
-        XMLInputFactory xmlInputFactory = XMLInputFactory.newDefaultFactory();
         XMLOutputFactory xmlOutputFactory = XMLOutputFactory.newDefaultFactory();
         StringWriter out = new StringWriter();
         XMLStreamWriter sw = xmlOutputFactory.createXMLStreamWriter(out);
@@ -49,7 +42,7 @@ public class ZurRosePrescription {
         sw.writeStartDocument();
         sw.writeStartElement("prescription");
 
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.from(ZoneOffset.UTC));
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         sw.writeAttribute("issueDate", formatter.format(this.issueDate));
         sw.writeAttribute("validity",
                 this.validity != null ? formatter.format(this.validity) :

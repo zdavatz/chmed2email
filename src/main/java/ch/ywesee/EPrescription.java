@@ -416,7 +416,7 @@ public class EPrescription {
                     validityRepetition = mediPos.dtTo;
                 }
             }
-            product.validityRepetition = validityRepetition == null ? "" : formatter.format(validityRepetition);
+            product.validityRepetition = validityRepetition == null ? null : formatter.format(validityRepetition);
             product.repetition = repetition;
             product.posology = poses;
         }

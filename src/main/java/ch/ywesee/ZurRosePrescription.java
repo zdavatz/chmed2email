@@ -92,8 +92,6 @@ public class ZurRosePrescription {
         sw.writeEndDocument();
 
         String xml = out.toString();
-        System.out.println("xml: " + xml);
-
         return xml;
     }
 }

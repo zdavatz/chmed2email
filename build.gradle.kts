@@ -1,6 +1,7 @@
 plugins {
     id("java")
     id("application")
+    id("com.gradleup.shadow") version "9.0.0-beta12"
 }
 
 group = "ch.ywesee"
@@ -17,6 +18,7 @@ dependencies {
     implementation("commons-cli:commons-cli:1.9.0")
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.zxing:javase:3.5.3")
+    implementation("org.apache.pdfbox:pdfbox:3.0.4")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }

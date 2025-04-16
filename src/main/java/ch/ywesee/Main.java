@@ -5,6 +5,7 @@ import javax.xml.stream.XMLStreamException;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
@@ -14,6 +15,9 @@ import jakarta.mail.*;
 import jakarta.mail.internet.MimeMultipart;
 import jakarta.mail.search.FlagTerm;
 import org.apache.commons.cli.*;
+import org.apache.hc.client5.http.fluent.Content;
+import org.apache.hc.client5.http.fluent.Request;
+import org.apache.hc.client5.http.fluent.Response;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSName;
 import org.apache.pdfbox.io.IOUtils;
@@ -162,7 +166,21 @@ public class Main {
 
     public void handleEPrescription(EPrescription ePrescription) throws XMLStreamException, IOException {
         ZurRosePrescription zp = ePrescription.toZurRosePrescription();
-        System.out.println("xml: " + zp.toXML());
+        System.out.println("Sending XML: " + zp.toXML());
+        boolean verbose = false;
+        if (verbose) {
+            System.setProperty("javax.net.debug", "ssl"); // very verbose debug
+        }
+
+        String url = "https://estudio.zur-rose.ch/estudio/prescriptioncert";
+        Response response = Request.post(url)
+                .addHeader("Content-type", "text/xml; charset=utf-8")
+                .bodyByteArray(zp.toXML().getBytes(StandardCharsets.UTF_8))
+                .execute();
+
+        Content content = response.returnContent();
+
+        System.out.println(content);
     }
 
     public void fetchEmails() throws Exception {

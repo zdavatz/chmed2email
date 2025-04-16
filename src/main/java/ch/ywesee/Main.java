@@ -1,16 +1,26 @@
 package ch.ywesee;
 
 import javax.imageio.ImageIO;
+import javax.xml.stream.XMLStreamException;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Properties;
 
 import com.google.zxing.client.j2se.BufferedImageLuminanceSource;
 import com.google.zxing.common.HybridBinarizer;
 import com.google.zxing.*;
+import jakarta.mail.*;
+import jakarta.mail.internet.MimeMultipart;
+import jakarta.mail.search.FlagTerm;
 import org.apache.commons.cli.*;
+import org.apache.hc.client5.http.fluent.Content;
+import org.apache.hc.client5.http.fluent.Request;
+import org.apache.hc.client5.http.fluent.Response;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.cos.COSName;
+import org.apache.pdfbox.io.IOUtils;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDResources;
@@ -24,6 +34,15 @@ public class Main {
         Option help = new Option("h", "help", false, "Show help message");
         options.addOption(help);
 
+        Option verboseOption = new Option("v", "verbose", false, "Show more log");
+        options.addOption(verboseOption);
+
+        Option dryRunOption = new Option(null, "dry-run", false, "Show XML without sending.");
+        options.addOption(dryRunOption);
+
+        Option verboseMailOption = new Option("vm", "verbose-mail", false, "Show more log for IMAP");
+        options.addOption(verboseMailOption);
+
         Option input = new Option("c", "chmed16a", true, "CHMED16A string");
         options.addOption(input);
 
@@ -33,8 +52,35 @@ public class Main {
         Option pdfOption = new Option("p", "pdf", true, "Path to PDF file");
         options.addOption(pdfOption);
 
+        Option emailHost = new Option(null, "mail-host", true, "Host of IMAP server to connect to");
+        options.addOption(emailHost);
+
+        Option emailPort = new Option(null, "mail-port", true, "Port of IMAP server to connect to");
+        emailPort.setType(Number.class);
+        options.addOption(emailPort);
+
+        Option emailUsername = new Option(null, "mail-username", true, "Username of IMAP server to connect to");
+        options.addOption(emailUsername);
+
+        Option emailPassword = new Option(null, "mail-password", true, "Password of IMAP server to connect to");
+        options.addOption(emailPassword);
+
+        Option emailNoSecure = new Option(null, "mail-no-secure", false, "Disable SSL for IMAP connection");
+        options.addOption(emailNoSecure);
+
+        Option mailboxOption = new Option(null, "mailbox", true, "Which folder in the mailbox to read. Case insensitive. Default: inbox.");
+        mailboxOption.setType(String.class);
+        options.addOption(mailboxOption);
+
+        Option skipSeenOption = new Option(null, "mail-skip-seen", false, "Skip seen message?");
+        options.addOption(skipSeenOption);
+
+        Option markAsSeenOption = new Option(null, "mail-mark-as-seen", false, "Mark message as seen after processing?");
+        options.addOption(markAsSeenOption);
+
         CommandLineParser parser = new DefaultParser();
         HelpFormatter formatter = new HelpFormatter();
+        formatter.setOptionComparator(null);
         CommandLine cmd = null;
         try {
             cmd = parser.parse(options, args);
@@ -47,53 +93,42 @@ public class Main {
             formatter.printHelp("chmed2email", options);
             return;
         }
+
+        new Main(cmd).run();
+
+    }
+
+    int prescriptionCount = 0;
+    CommandLine cmd;
+    boolean verbose = false;
+    boolean verboseMail = false;
+
+    Main(CommandLine cmd) {
+        this.cmd = cmd;
+        this.verbose = this.cmd.hasOption("verbose");
+        this.verboseMail = this.cmd.hasOption("verbose-mail");
+    }
+
+    void run() throws Exception {
         String chmed16A = cmd.getOptionValue("chmed16a");
         if (chmed16A != null) {
             EPrescription ep = new EPrescription(chmed16A);
-            ZurRosePrescription zp = ep.toZurRosePrescription();
-            System.out.println(zp.toXML());
-            return;
+            handleEPrescription(ep);
         }
 
         String qrCodeImagePath = cmd.getOptionValue("qr-code");
         if (qrCodeImagePath != null) {
-            String content = scanQRImage(ImageIO.read(new File(qrCodeImagePath)));
-            if (content != null) {
-                System.out.println("Content in QRCode:" + content);
-                EPrescription ep = new EPrescription(content);
-                ZurRosePrescription zp = ep.toZurRosePrescription();
-                System.out.println(zp.toXML());
-            }
+            handleImage(ImageIO.read(new File(qrCodeImagePath)));
         }
-
 
         String pdfPath = cmd.getOptionValue("pdf");
         if (pdfPath != null) {
             PDDocument document = Loader.loadPDF(new File(pdfPath));
-            int imageCountInPDF = 0;
-            boolean foundQRCodeInPDF = false;
-            for (PDPage page : document.getPages()) {
-                PDResources resources = page.getResources();
-                for (COSName name : resources.getXObjectNames()) {
-                    PDXObject obj = resources.getXObject(name);
-                    if (obj instanceof PDImageXObject) {
-                        imageCountInPDF++;
-                        BufferedImage image = ((PDImageXObject) obj).getImage();
-                        String result = scanQRImage(image);
-                        if (result != null) {
-                            System.out.println("Found QRCode in PDF " + result);
-                            foundQRCodeInPDF = true;
-                            EPrescription ep = new EPrescription(result);
-                            ZurRosePrescription zp = ep.toZurRosePrescription();
-                            System.out.println(zp.toXML());
-                        }
-                    }
-                }
-            }
-            if (imageCountInPDF > 0 && !foundQRCodeInPDF) {
-                System.err.println(imageCountInPDF + " images found in PDF, but no QRCode is found");
-            }
+            handlePDF(document);
         }
+
+        fetchEmails();
+        System.out.println("Processed " + prescriptionCount + " prescriptions in total");
     }
 
     public static String scanQRImage(BufferedImage bufferedImage) throws IOException {
@@ -113,4 +148,144 @@ public class Main {
         return contents;
     }
 
+    public void handlePDF(PDDocument document) throws Exception {
+        int imageCountInPDF = 0;
+        boolean foundQRCodeInPDF = false;
+        for (PDPage page : document.getPages()) {
+            PDResources resources = page.getResources();
+            for (COSName name : resources.getXObjectNames()) {
+                PDXObject obj = resources.getXObject(name);
+                if (obj instanceof PDImageXObject) {
+                    imageCountInPDF++;
+                    BufferedImage image = ((PDImageXObject) obj).getImage();
+                    handleImage(image);
+                }
+            }
+        }
+        if (imageCountInPDF == 0) {
+            System.err.println("No image found in PDF.");
+        } else if (!foundQRCodeInPDF) {
+            System.err.println(imageCountInPDF + " images found in PDF, but no QRCode is found");
+        }
+    }
+
+    public void handleImage(BufferedImage image) throws Exception {
+        String content = scanQRImage(image);
+        if (content != null) {
+            System.out.println("Content in QRCode:" + content);
+            EPrescription ep = new EPrescription(content);
+            handleEPrescription(ep);
+        }
+    }
+
+    public void handleEPrescription(EPrescription ePrescription) throws XMLStreamException, IOException {
+        prescriptionCount++;
+        ZurRosePrescription zp = ePrescription.toZurRosePrescription();
+        if (this.cmd.hasOption("dry-run")) {
+            System.out.println("Converted to XML, not sending: " + zp.toXML());
+        } else {
+            System.out.println("Sending XML: " + zp.toXML());
+            if (this.verbose) {
+                System.setProperty("javax.net.debug", "ssl");
+            }
+
+            String url = "https://estudio.zur-rose.ch/estudio/prescriptioncert";
+            Response response = Request.post(url)
+                    .addHeader("Content-type", "text/xml; charset=utf-8")
+                    .bodyByteArray(zp.toXML().getBytes(StandardCharsets.UTF_8))
+                    .execute();
+
+            Content content = response.returnContent();
+
+            System.out.println("Response: " + content);
+        }
+    }
+
+    public void fetchEmails() throws Exception {
+        String emailHost = this.cmd.getOptionValue("mail-host");
+        int emailPort = ((Number)this.cmd.getParsedOptionValue("mail-port", 993)).intValue();
+        String emailUsername = this.cmd.getOptionValue("mail-username");
+        String emailPassword = this.cmd.getOptionValue("mail-password");
+        boolean emailNoSecure = this.cmd.hasOption("mail-no-secure");
+        String mailboxName = this.cmd.getOptionValue("mailbox", "Inbox");
+        boolean skipSeenMessage = this.cmd.hasOption("mail-skip-seen");
+        boolean markAsSeen = this.cmd.hasOption("mail-mark-as-seen");
+
+        if (emailHost == null || emailUsername == null || emailPassword == null) {
+            if (this.verbose) {
+                System.out.println("Not connecting to IMAP server. Need at least mail-host, mail-username, mail-password.");
+            }
+            return;
+        }
+
+        final Properties properties = new Properties();
+        if (!emailNoSecure) {
+            properties.put("mail.imap.ssl.enable", "true");
+        }
+        properties.setProperty("mail.imap.host", emailHost); // imap.gmail.com
+        properties.setProperty("mail.imap.port", Integer.toString(emailPort)); // 993
+        properties.setProperty("mail.imap.connectiontimeout", "5000");
+        properties.setProperty("mail.imap.timeout", "5000");
+        properties.setProperty("mail.imap.ssl.protocols", "TLSv1.2 TLSv1.3");
+
+        Session imapSession = Session.getInstance(properties, null);
+        if (this.verboseMail) {
+            imapSession.setDebug(true);
+        }
+        Store imapStore = imapSession.getStore("imap");
+
+        imapStore.connect("imap.gmail.com", emailUsername, emailPassword);
+
+        Folder defaultFolder = imapStore.getDefaultFolder();
+        Folder[] folders = defaultFolder.list();
+
+        Folder inbox = null;
+        for (Folder f : folders) {
+            if (f.getFullName().equalsIgnoreCase(mailboxName)) {
+                inbox = f;
+                break;
+            }
+        }
+        if (inbox == null) {
+            System.err.println("Cannot find mailbox named " + mailboxName + ". Available folders are:");
+            for (Folder f : folders) {
+                System.err.println(f.getFullName());
+            }
+            throw new Exception("Cannot find mailbox.");
+        }
+
+        inbox.open(Folder.READ_WRITE);
+
+        Message[] ms = skipSeenMessage
+                ? inbox.search(new FlagTerm(new Flags(Flags.Flag.SEEN), false))
+                : inbox.getMessages();
+        System.out.println("Found " + ms.length + " messages");
+
+        for (Message message : ms) {
+            long uid = inbox instanceof UIDFolder ? ((UIDFolder)inbox).getUID(message) : message.getMessageNumber();
+            System.out.println("Found message. UID=" + uid);
+            System.out.println("Subject: " + message.getSubject());
+
+            System.out.println("Getting attachment");
+            Object content = message.getContent();
+            if (content instanceof MimeMultipart) {
+                MimeMultipart multipart = (MimeMultipart) content;
+                for (int i = 0; i < multipart.getCount(); i++) {
+                    BodyPart bodyPart = multipart.getBodyPart(i);
+                    String contentType = bodyPart.getContentType();
+                    if (contentType.toLowerCase().startsWith("application/pdf")) {
+                        PDDocument document = Loader.loadPDF(IOUtils.toByteArray(bodyPart.getInputStream()));
+                        handlePDF(document);
+                    } else {
+                        System.out.println("Skipping unrecognised content-type: " + contentType);
+                    }
+                }
+            }
+            if (markAsSeen) {
+                System.out.println("Marking message as seen.");
+                message.setFlag(Flags.Flag.SEEN, true);
+            }
+        }
+        inbox.close(false);
+    }
 }

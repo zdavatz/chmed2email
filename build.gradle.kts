@@ -19,6 +19,8 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     implementation("com.google.zxing:javase:3.5.3")
     implementation("org.apache.pdfbox:pdfbox:3.0.4")
+    // https://mvnrepository.com/artifact/com.sun.mail/jakarta.mail
+    implementation("com.sun.mail:jakarta.mail:2.0.1")
     testImplementation(platform("org.junit:junit-bom:5.10.0"))
     testImplementation("org.junit.jupiter:junit-jupiter")
 }

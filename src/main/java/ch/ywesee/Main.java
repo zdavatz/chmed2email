@@ -34,6 +34,15 @@ public class Main {
         Option help = new Option("h", "help", false, "Show help message");
         options.addOption(help);
 
+        Option verboseOption = new Option("v", "verbose", false, "Show more log");
+        options.addOption(verboseOption);
+
+        Option dryRunOption = new Option(null, "dry-run", false, "Show XML without sending.");
+        options.addOption(dryRunOption);
+
+        Option verboseMailOption = new Option("vm", "verbose-mail", false, "Show more log for IMAP");
+        options.addOption(verboseMailOption);
+
         Option input = new Option("c", "chmed16a", true, "CHMED16A string");
         options.addOption(input);
 
@@ -89,10 +98,15 @@ public class Main {
 
     }
 
+    int prescriptionCount = 0;
     CommandLine cmd;
+    boolean verbose = false;
+    boolean verboseMail = false;
 
     Main(CommandLine cmd) {
         this.cmd = cmd;
+        this.verbose = this.cmd.hasOption("verbose");
+        this.verboseMail = this.cmd.hasOption("verbose-mail");
     }
 
     void run() throws Exception {
@@ -100,7 +114,6 @@ public class Main {
         if (chmed16A != null) {
             EPrescription ep = new EPrescription(chmed16A);
             handleEPrescription(ep);
-            return;
         }
 
         String qrCodeImagePath = cmd.getOptionValue("qr-code");
@@ -115,6 +128,7 @@ public class Main {
         }
 
         fetchEmails();
+        System.out.println("Processed " + prescriptionCount + " prescriptions in total");
     }
 
     public static String scanQRImage(BufferedImage bufferedImage) throws IOException {
@@ -165,22 +179,26 @@ public class Main {
     }
 
     public void handleEPrescription(EPrescription ePrescription) throws XMLStreamException, IOException {
+        prescriptionCount++;
         ZurRosePrescription zp = ePrescription.toZurRosePrescription();
-        System.out.println("Sending XML: " + zp.toXML());
-        boolean verbose = false;
-        if (verbose) {
-            System.setProperty("javax.net.debug", "ssl"); // very verbose debug
+        if (this.cmd.hasOption("dry-run")) {
+            System.out.println("Converted to XML, not sending: " + zp.toXML());
+        } else {
+            System.out.println("Sending XML: " + zp.toXML());
+            if (this.verbose) {
+                System.setProperty("javax.net.debug", "ssl");
+            }
+
+            String url = "https://estudio.zur-rose.ch/estudio/prescriptioncert";
+            Response response = Request.post(url)
+                    .addHeader("Content-type", "text/xml; charset=utf-8")
+                    .bodyByteArray(zp.toXML().getBytes(StandardCharsets.UTF_8))
+                    .execute();
+
+            Content content = response.returnContent();
+
+            System.out.println("Response: " + content);
         }
-
-        String url = "https://estudio.zur-rose.ch/estudio/prescriptioncert";
-        Response response = Request.post(url)
-                .addHeader("Content-type", "text/xml; charset=utf-8")
-                .bodyByteArray(zp.toXML().getBytes(StandardCharsets.UTF_8))
-                .execute();
-
-        Content content = response.returnContent();
-
-        System.out.println(content);
     }
 
     public void fetchEmails() throws Exception {
@@ -194,7 +212,9 @@ public class Main {
         boolean markAsSeen = this.cmd.hasOption("mail-mark-as-seen");
 
         if (emailHost == null || emailUsername == null || emailPassword == null) {
-            // TODO: if verbose, log
+            if (this.verbose) {
+                System.out.println("Not connecting to IMAP server. Need at least mail-host, mail-username, mail-password.");
+            }
             return;
         }
 
@@ -209,9 +229,8 @@ public class Main {
         properties.setProperty("mail.imap.ssl.protocols", "TLSv1.2 TLSv1.3");
 
         Session imapSession = Session.getInstance(properties, null);
-        boolean showDebugMessages = true;
-        if (showDebugMessages) {
-//            imapSession.setDebug(true);
+        if (this.verboseMail) {
+            imapSession.setDebug(true);
         }
         Store imapStore = imapSession.getStore("imap");
 

@@ -12,7 +12,7 @@ public class ZurRoseProduct {
     public String description_; // optional
     public boolean repetition;
     public int nrOfRepetitions; // optional, 0 - 99
-    public int quantity; // 0 - 999
+    public int quantity = 0; // 0 - 999
     public String validityRepetition; // optional
     public int notSubstitutableForBrandName; // optional
     public String remark; // optional
@@ -62,7 +62,7 @@ public class ZurRoseProduct {
         if (this.nrOfRepetitions >= 0) {
             sw.writeAttribute("nrOfRepetitions", Integer.toString(this.nrOfRepetitions));
         }
-        sw.writeAttribute("quantity", Integer.toString(this.quantity));
+        sw.writeAttribute("quantity", Integer.toString(this.quantity <= 0 ? 1 : this.quantity));
         if (this.validityRepetition != null) {
             sw.writeAttribute("validityRepetition", this.validityRepetition);
         }
@@ -99,9 +99,8 @@ public class ZurRoseProduct {
 
         sw.writeStartElement("insurance");
 
-        if (this.insuranceEanId != null) {
-            sw.writeAttribute("eanId", this.insuranceEanId);
-        }
+        sw.writeAttribute("eanId", this.insuranceEanId == null ? "1" : this.insuranceEanId);
+
         if (this.insuranceBsvNr != null) {
             sw.writeAttribute("bsvNr", this.insuranceBsvNr);
         }

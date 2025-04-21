@@ -369,7 +369,7 @@ public class EPrescription {
 //        : [self.patientLang.lowercaseString hasPrefix:@"fr"] ? 2
 //        : [self.patientLang.lowercaseString hasPrefix:@"it"] ? 3
 //        : 1;
-        patient.patientNr = "";
+        patient.patientNr = "0";
         patient.coverCardId = coverCardId != null ? coverCardId : "";
 
         ArrayList<ZurRoseProduct> products = new ArrayList<>();
